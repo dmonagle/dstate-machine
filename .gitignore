@@ -1,0 +1,5 @@
+﻿# Ignore
+dub.userprefs
+.dub/*
+__test__library__
+*.a
