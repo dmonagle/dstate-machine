@@ -75,12 +75,19 @@ string defineStateMachine(Class, Enum, string name = "state")() {
 	code ~= enumCode;
 	code ~= transitionCode;
 	code ~= transitionStringCode;
-	code ~= "@property " ~ Enum.stringof ~ " " ~ name ~ "() { return _" ~ name ~ "; }";
-	code ~= "private {";
-	code ~= Enum.stringof ~ " _" ~ name ~ ";";
-	code ~= "}";
-	
+
 	return code;
+}
+
+mixin template stateMachine(Class, StateEnum, string attributeName = "state") {
+	private {
+		mixin(StateEnum.stringof ~ " _" ~ attributeName ~ ";");
+	}
+
+	@property mixin(StateEnum.stringof ~ " " ~ attributeName ~ "() { return _" ~ attributeName ~ "; }");
+	@property mixin("void " ~ attributeName ~ "Forced(" ~ StateEnum.stringof ~ " value) { _" ~ attributeName ~ " = value; }");
+
+	mixin(defineStateMachine!(Class, StateEnum, attributeName));
 }
 
 unittest {
@@ -93,7 +100,7 @@ unittest {
 			closed,
 		}
 		
-		mixin (defineStateMachine!(Task, State));
+		mixin stateMachine!(Task, State);
 		
 		@event @from("created") @to("todo", "closed") State makeTodo() {
 			return State.todo;
