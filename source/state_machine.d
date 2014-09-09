@@ -45,7 +45,7 @@ string defineStateMachine(Class, Enum, string name = "state")() {
 	capName ~= toUpper(name[0..1]);
 	capName ~= name[1..$];
 	
-	string enumCode = "enum " ~ capName ~ "Event { ";
+	string[] eventEnums;
 	string transitionCode = Enum.stringof ~ " transition(" ~ capName ~ "Event event) {";
 	string transitionStringCode = Enum.stringof ~ " transition(string eventName) {";
 	
@@ -57,7 +57,7 @@ string defineStateMachine(Class, Enum, string name = "state")() {
 			alias memberType = typeof(__traits(getMember, Class, memberName));
 			alias eventUDA = findFirstUDA!(StateMachineEventAttribute, member);
 			static if (eventUDA.found) {
-				enumCode ~= memberName ~ ",";
+				eventEnums ~= memberName;
 				transitionStringCode ~= "case \"" ~ memberName ~ "\": return transition(" ~ capName ~ "Event." ~ memberName ~ ");";
 				transitionCode ~= "case " ~ capName ~ "Event." ~ memberName ~ ": {";
 				transitionCode ~= "_" ~ name ~ " = " ~ memberName ~ "();";
@@ -66,20 +66,22 @@ string defineStateMachine(Class, Enum, string name = "state")() {
 			}
 		}
 	}
-	enumCode ~= "}";
-	
+
 	transitionCode ~= "}}"; // End function and switch
 	transitionStringCode ~= "default: throw new InvalidEventException(\"No event called '\" ~ eventName ~ \"'\");}}"; // End function and switch
 	
 	string code;
-	code ~= enumCode;
+
+	assert(eventEnums.length, "No events defined for state machine in class " ~ Class.stringof);
+
+	code ~= "enum " ~ capName ~ "Event {" ~ eventEnums.join(",") ~ "}";
 	code ~= transitionCode;
 	code ~= transitionStringCode;
 
 	return code;
 }
 
-mixin template stateMachine(Class, StateEnum, string attributeName = "state") {
+mixin template StateMachine(Class, StateEnum, string attributeName = "state") {
 	private {
 		mixin(StateEnum.stringof ~ " _" ~ attributeName ~ ";");
 	}
@@ -100,7 +102,7 @@ unittest {
 			closed,
 		}
 		
-		mixin stateMachine!(Task, State);
+		mixin StateMachine!(Task, State);
 		
 		@event @from("created") @to("todo", "closed") State makeTodo() {
 			return State.todo;
