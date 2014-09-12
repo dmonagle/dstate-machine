@@ -1,5 +1,9 @@
 ﻿module state_machine;
 
+version (Have_vibe_d) {
+	import vibe.data.serialization;
+}
+
 struct StateMachineEventAttribute {
 	string stateName;
 }
