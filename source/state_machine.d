@@ -86,8 +86,15 @@ mixin template StateMachine(Class, StateEnum, string attributeName = "state") {
 		mixin(StateEnum.stringof ~ " _" ~ attributeName ~ ";");
 	}
 
-	@property mixin(StateEnum.stringof ~ " " ~ attributeName ~ "() { return _" ~ attributeName ~ "; }");
-	@property mixin("void " ~ attributeName ~ "Forced(" ~ StateEnum.stringof ~ " value) { _" ~ attributeName ~ " = value; }");
+	static immutable string attributeReader = StateEnum.stringof ~ " " ~ attributeName ~ "() { return _" ~ attributeName ~ "; }";
+
+	version (Have_vibe_d) {
+		@optional @byName @property mixin(attributeReader);
+	} else {
+		@property mixin(attributeReader);
+	}
+	
+	@property mixin("void " ~ attributeName ~ "(" ~ StateEnum.stringof ~ " value) { _" ~ attributeName ~ " = value; }");
 
 	mixin(defineStateMachine!(Class, StateEnum, attributeName));
 }
