@@ -90,7 +90,7 @@ mixin template StateMachine(Class, StateEnum, string attributeName = "state") {
 		mixin(StateEnum.stringof ~ " _" ~ attributeName ~ ";");
 	}
 
-	static immutable string attributeReader = StateEnum.stringof ~ " " ~ attributeName ~ "() { return _" ~ attributeName ~ "; }";
+	static immutable string attributeReader = "const " ~ StateEnum.stringof ~ " " ~ attributeName ~ "() { return _" ~ attributeName ~ "; }";
 
 	version (Have_vibe_d) {
 		@optional @byName @property mixin(attributeReader);
