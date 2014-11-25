@@ -72,7 +72,6 @@ mixin template StateProperty() {
 
 mixin template StateMachine(StateEnum) {
 	static immutable string attributeName = camelize!(StateEnum.stringof);
-	pragma(msg, attributeName);
 	// Template to definte private property for the state
 	static template defineStateMember(StateEnum, string attributeName) {
 		const char[] defineStateMember = StateEnum.stringof ~ " _" ~ attributeName ~ ";";
