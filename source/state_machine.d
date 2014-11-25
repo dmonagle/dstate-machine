@@ -37,13 +37,23 @@ class InvalidTransitionException : Exception {
 	this(string s) { super(s); }
 }
 
-template Tuple (T...) {
-	alias Tuple = T;
+template PTuple (T...) {
+	alias PTuple = T;
+}
+
+template camelize(string name) {
+	import std.string;
+
+	immutable string camelize = toLower(name[0..1]) ~ name[1..$];
+}
+
+unittest {
+	assert(camelize!"StatusString" == "statusString");
 }
 
 mixin template StateProperty() {
 	// Template to definte the attribute getter
-	static template defineGetter(StateEnum, string attributeName) {
+	static template defineGetter(StateEnum) {
 		const char[] defineGetter = "const " ~ StateEnum.stringof ~ " " ~ attributeName ~ "() { return _" ~ attributeName ~ "; }";
 	}
 
@@ -51,16 +61,18 @@ mixin template StateProperty() {
 
 	// State Getter
 	version (Have_vibe_d) {
-		@optional @byName @property mixin(defineGetter!(StateEnum, attributeName));
+		@optional @byName @property mixin(defineGetter!StateEnum);
 	} else {
-		@property mixin(defineGetter!(StateEnum, attributeName));
+		@property mixin(defineGetter!StateEnum);
 	}
 
 	// State Setter
 	@property mixin("void " ~ attributeName ~ "(" ~ StateEnum.stringof ~ " value) { _" ~ attributeName ~ " = value; }");
 }
 
-mixin template StateMachine(StateEnum, string attributeName = "state") {
+mixin template StateMachine(StateEnum) {
+	static immutable string attributeName = camelize!(StateEnum.stringof);
+	pragma(msg, attributeName);
 	// Template to definte private property for the state
 	static template defineStateMember(StateEnum, string attributeName) {
 		const char[] defineStateMember = StateEnum.stringof ~ " _" ~ attributeName ~ ";";
@@ -74,13 +86,13 @@ mixin template StateMachine(StateEnum, string attributeName = "state") {
 	mixin StateProperty;
 
 	/// CTFE transition
-	bool transition(string eventName, string attributeName = "state", this MixinClass)() {
+	bool transition(string eventName, this MixinClass)() {
 		import vibe.internal.meta.uda;
 
 		foreach (memberName; __traits(allMembers, MixinClass)) {
 			if (memberName == eventName) {
 				static if (is(typeof(__traits(getMember, MixinClass.init, memberName)))) {
-					alias member = Tuple!(__traits(getMember, MixinClass, memberName));
+					alias member = PTuple!(__traits(getMember, MixinClass, memberName));
 					alias memberType = typeof(__traits(getMember, MixinClass, memberName));
 					alias eventUDA = findFirstUDA!(StateMachineEventAttribute, member);
 					static if (eventUDA.found) {
@@ -98,17 +110,17 @@ mixin template StateMachine(StateEnum, string attributeName = "state") {
 	}
 
 	/// Allows transitions by string name
-	bool transition(string attributeName = "state", this MixinClass)(string eventName) {
+	bool transition(this MixinClass)(string eventName) {
 		import vibe.internal.meta.uda;
 
 		switch (eventName) {
 	        foreach (memberName; __traits(allMembers, MixinClass)) {
 				static if (is(typeof(__traits(getMember, MixinClass.init, memberName)))) {
-					alias member = Tuple!(__traits(getMember, MixinClass, memberName));
+					alias member = PTuple!(__traits(getMember, MixinClass, memberName));
 					alias memberType = typeof(__traits(getMember, MixinClass, memberName));
 					alias eventUDA = findFirstUDA!(StateMachineEventAttribute, member);
 					static if (eventUDA.found) {
-						case memberName: return transition!(memberName, attributeName); 
+						case memberName: return transition!(memberName); 
 					}
 				}
 			}
@@ -150,5 +162,39 @@ unittest {
 	assert(t.state == Task.State.todo);
 	assert(t.transition("cancel"));
 	assert(t.state == Task.State.cancelled);
+	assertThrown!InvalidEventException(t.transition("wrongEvent"));
+}
+
+unittest {
+	import std.exception;
+	
+	class Task {
+		enum Status {
+			created,
+			todo,
+			closed,
+			cancelled,
+		}
+		
+		mixin StateMachine!(Status);
+		
+		@event @from("created") @to("todo") 
+		Status makeTodo() {
+			return Status.todo;
+		}
+		
+		@event @from("todo") @to("cancelled") 
+		Status cancel() {
+			return Status.cancelled;
+		}
+	}
+	
+	auto t = new Task();
+	assert(t.status == Task.Status.created);
+	assertThrown!InvalidEventException(!t.transition!"closed");
+	assert(t.transition!"makeTodo");
+	assert(t.status == Task.Status.todo);
+	assert(t.transition("cancel"));
+	assert(t.status == Task.Status.cancelled);
 	assertThrown!InvalidEventException(t.transition("wrongEvent"));
 }
