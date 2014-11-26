@@ -15,28 +15,33 @@ SMTransitionEventAttribute transitionEvent(string stateName) {
 	return SMTransitionEventAttribute(stateName);
 }
 
-struct SMBeforeTransitionToAttribute {
-	string state;
+struct SMGuardAttribute(alias Function) {
+	alias pred = Function;
 }
 
-SMBeforeTransitionToAttribute beforeTransitionTo(string state) {
-	return SMBeforeTransitionToAttribute(state);
+auto guard(alias Function)() {
+	return SMGuardAttribute!Function();
 }
 
-struct SMAfterTransitionToAttribute {
-	string state;
-}
-
-SMAfterTransitionToAttribute afterTransitionTo(string state) {
-	return SMAfterTransitionToAttribute(state);
+unittest {
+	auto g = guard!(n => ((n % 2) == 0));
+	assert(g.pred(2));
 }
 
 struct SMFromStateAttribute {
 	string[] states;
 }
 
-SMFromStateAttribute fromState(string[] states...) {
+auto fromState(string[] states...) {
 	return SMFromStateAttribute(states);
+}
+
+struct SMToStateAttribute {
+	string[] states;
+}
+
+auto toState(string[] states...) {
+	return SMToStateAttribute(states);
 }
 
 template camelize(string name) {
@@ -56,7 +61,7 @@ template findUDA(UDA, alias Symbol) {
 		bool found = false;
 		long index = -1;
 	}
-
+	
 	private template extract(size_t index, attributes...) {
 		static if (!attributes.length) enum extract = UdaSearchResult!(null)(false, -1);
 		else {
@@ -66,100 +71,31 @@ template findUDA(UDA, alias Symbol) {
 				enum extract = extract!(index + 1, attributes[1..$]);
 		}
 	}
-
+	
 	private alias TypeTuple!(__traits(getAttributes, Symbol)) udaTuple;
 	enum findUDA = extract!(0, udaTuple);
 }
 
-/// StateProperty 
-struct StateProperty(StateEnum) {
-	private {
-		StateEnum _state;
-	}
-
-	alias state this;
-
-	@property void forceState(StateEnum state) { _state = state; }
-	@property StateEnum state() const {
-		return _state;
-	}
-
-	@safe string toString() const {
-		return to!string(_state);
-	}
-
-	version (Have_vibe_d) {
-		import vibe.data.json;
-		import vibe.data.bson;
-		import std.conv;
-
-		static StateProperty fromJson(Json value) {
-			StateProperty state;
-			if (value.type == Json.Type.string) {
-				state.forceState(to!StateEnum(value.get!string));
-			}
-			return state;
-		}
-		
-		Json toJson() const {
-			return Json(_state.to!string);
-		}
-
-		static StateProperty fromBson(Bson value) {
-			StateProperty state;
-			if (value.type == Bson.Type.string) {
-				state.forceState(to!StateEnum(value.get!string));
-			}
-			return state;
-		}
-		
-		Bson toBson() const {
-			return Bson(_state.to!string);
-		}
-	}
-}
-
-unittest {
-	enum Status {
-		created,
-		todo,
-		closed,
-		cancelled,
+// Not proud of this function, there must be a better way to do the guard.
+template guardAttrIndex(udaTuple...) {
+	private struct UdaSearchResult(alias UDA) {
+		alias value = UDA;
+		bool found = false;
+		long index = -1;
 	}
 	
-	StateProperty!(Status) status;
-	
-	status.forceState(Status.todo);
-	assert(status == Status.todo);
-}
-
-version (Have_vibe_d) {
-	unittest {
-		import vibe.d;
-		
-		struct Task {
-			enum Status {
-				created,
-				todo,
-				closed,
-				cancelled,
+	private template extract(size_t index, attributes...) {
+		static if (!attributes.length) enum extract = -1;
+		else {
+			static if (TypeTuple!(attributes[0]).stringof[$ - 7..$] == "(guard)") {
+				enum extract = index;
 			}
-			
-			StateProperty!Status status;
+			else 
+				enum extract = extract!(index + 1, attributes[1..$]);
 		}
-		
-		Task task;
-		
-		auto toJ = serializeToJson(task);
-		import std.stdio;
-
-		auto jSource = parseJsonString(`{"status": "todo"}`);
-		deserializeJson(task, jSource);
-		import std.stdio;
-		assert (task.status == Task.Status.todo);
-		task.status.forceState(Task.Status.closed);
-		assert (task.status == Task.Status.closed);
 	}
+	
+	enum guardAttrIndex = extract!(0, udaTuple);
 }
 
 mixin template StateMachine(Parent, StateEnum) {
@@ -193,51 +129,46 @@ mixin template StateMachine(Parent, StateEnum) {
 
 			foreach (memberName; __traits(allMembers, Parent)) {
 				static if (is(typeof(__traits(getMember, Parent.init, memberName)) == function)) {
+
+					string[] toStates;
 					string[] fromStates;
+
 					alias member = TypeTuple!(__traits(getMember, Parent, memberName));
 					alias transitionUDA = findUDA!(SMTransitionEventAttribute, member);
 					static if (transitionUDA.found && (transitionUDA.value.stateEnumName == StateEnum.stringof)) {
 						pragma(msg, "StateMachine event '" ~ memberName ~ "' for '" ~ Parent.stringof ~ "'")
-						alias beforeTransitionUDA = findUDA!(SMBeforeTransitionToAttribute, member);
-						alias afterTransitionUDA = findUDA!(SMAfterTransitionToAttribute, member);
-						static assert(beforeTransitionUDA.found ^ afterTransitionUDA.found, "Must have exactly one of beforeTransitionTo or afterTransitionTo UDA on a @transitionEvent");
 
 						alias fromStateUDA = findUDA!(SMFromStateAttribute, member);
+						alias toStateUDA = findUDA!(SMToStateAttribute, member);
 
-						static if (fromStateUDA.found) {
+						static if (fromStateUDA.found) 
 							fromStates = fromStateUDA.value.states;
-						}
-						else {
+						else 
 							fromStates = [];
-						}
 
-						if (fromStates.length == 0 || fromStates.canFind(mixin(statePropertyName).to!string)) {
-							static if (beforeTransitionUDA.found) {
-								if (s == to!StateEnum(beforeTransitionUDA.value.state)) {
-									import std.stdio;
-									writeln("Before: " ~ s.to!string);
-									if (is(ReturnType!member == bool)) {
-										// Execute the transition function and check result
-										if(!mixin(memberName)) {
-											// Need to throw an exception here
-											transitionSuccessful = false;
-											assert(false);
-										}
+						static if (toStateUDA.found) 
+							toStates = toStateUDA.value.states;
+						else 
+							toStates = [];
 
-									}
-									else {
-										// Just execute the transition function
-										mixin(memberName ~ ";");
-									}
-								}
+						if ((fromStates.length == 0 || fromStates.canFind(mixin(statePropertyName).to!string)) &&
+						    (toStates.length == 0 || toStates.canFind(s.to!string))) {
+
+							bool guardPassed = true;
+
+							alias TypeTuple!(__traits(getAttributes, member)) attributes;
+							// See if there is a guard attribute present
+							enum guardIndex = guardAttrIndex!(attributes);
+							static if (guardIndex != -1) 
+								guardPassed = attributes[guardIndex].pred(this);
+
+							// Execute the transition function
+							if (guardPassed) {
+								mixin(memberName ~ ";");
+								transitionSuccessful = true;
 							}
 							else {
-								if (s == to!StateEnum(afterTransitionUDA.value.state)) {
-									import std.stdio;
-									writeln("After: " ~ s.to!string);
-									// Execute the transition function
-									mixin(memberName ~ ";");
-								}
+								// Perhaps we can optionally throw an exception here?
 							}
 						}
 					}
@@ -264,19 +195,21 @@ unittest {
 
 		mixin StateMachine!(Task, Status);
 
-		@transitionEvent("Status") @afterTransitionTo("todo") void afterTodo() {
-			isClosed = false;
-			isCancelled = false;
-		}
+		private {
+			@transitionEvent("Status") @toState("todo") void afterTodo() {
+				isClosed = false;
+				isCancelled = false;
+			}
 
-		@transitionEvent("Status") @afterTransitionTo("closed") @fromState("todo") void closeCleanup() {
-			isClosed = true;
-		}
+			@transitionEvent("Status") @toState("closed") @fromState("todo") void closeCleanup() {
+				isClosed = true;
+			}
 
-		@transitionEvent("Status") @beforeTransitionTo("cancelled") bool cancelledCleanup() {
-			if (isClosed) return false;
-			isCancelled = true;
-			return true;
+			@transitionEvent("Status") @toState("cancelled") @guard!((task) => !task.isClosed) bool cancelledCleanup() {
+				if (isClosed) return false;
+				isCancelled = true;
+				return true;
+			}
 		}
 	}
 
