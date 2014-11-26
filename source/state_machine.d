@@ -98,7 +98,7 @@ template guardAttrIndex(udaTuple...) {
 	enum guardAttrIndex = extract!(0, udaTuple);
 }
 
-mixin template StateMachine(Parent, StateEnum) {
+mixin template StateMachine(Parent, StateEnum, bool transitionWithoutDefinition = false) {
 	import std.algorithm;
 
 	static immutable string statePropertyName = camelize!(StateEnum.stringof);
@@ -126,6 +126,7 @@ mixin template StateMachine(Parent, StateEnum) {
 		static if (is(Parent == class) || is(Parent == struct)) {
 			bool checkStates = false;
 			bool transitionSuccessful = true;
+			bool transitionDefined = false;
 
 			foreach (memberName; __traits(allMembers, Parent)) {
 				static if (is(typeof(__traits(getMember, Parent.init, memberName)) == function)) {
@@ -137,6 +138,7 @@ mixin template StateMachine(Parent, StateEnum) {
 					alias transitionUDA = findUDA!(SMTransitionEventAttribute, member);
 					static if (transitionUDA.found && (transitionUDA.value.stateEnumName == StateEnum.stringof)) {
 						pragma(msg, "StateMachine event '" ~ memberName ~ "' for '" ~ Parent.stringof ~ "'")
+						transitionDefined = true;
 
 						alias fromStateUDA = findUDA!(SMFromStateAttribute, member);
 						alias toStateUDA = findUDA!(SMToStateAttribute, member);
@@ -165,9 +167,9 @@ mixin template StateMachine(Parent, StateEnum) {
 							// Execute the transition function
 							if (guardPassed) {
 								mixin(memberName ~ ";");
-								transitionSuccessful = true;
 							}
 							else {
+								transitionSuccessful = false;
 								// Perhaps we can optionally throw an exception here?
 							}
 						}
@@ -175,7 +177,7 @@ mixin template StateMachine(Parent, StateEnum) {
 				}
 			}
 			// Set the state to the target if the transition was successful
-			if (transitionSuccessful) mixin(statePropertyName) = s;
+			if (transitionSuccessful && (transitionWithoutDefinition ^ transitionDefined)) mixin(statePropertyName) = s;
 		}
 	}
 
@@ -190,10 +192,17 @@ unittest {
 			cancelled,
 		}
 
+		enum InternalState {
+			new_,
+			started,
+			finished,
+		}
+
 		bool isClosed = false;
 		bool isCancelled = false;
 
 		mixin StateMachine!(Task, Status);
+		mixin StateMachine!(Task, InternalState, true); // Allow transitions without an explicit definition
 
 		private {
 			@transitionEvent("Status") @toState("todo") void afterTodo() {
@@ -222,5 +231,9 @@ unittest {
 	task.statusTransition = "todo";
 	task.statusTransition = "cancelled";
 	assert(task.isCancelled == true);
+
+	assert(task.internalState == Task.InternalState.new_);
+	task.internalStateTransition = "started";
+	assert(task.internalState == Task.InternalState.started);
 }
 
