@@ -168,7 +168,13 @@ mixin template StateMachine(Parent, StateEnum) {
 	static immutable string statePropertyName = camelize!(StateEnum.stringof);
 
 	// Create the state member 
-	mixin(StateEnum.stringof ~ " " ~ statePropertyName ~ ";");
+	static immutable string propertyDef = StateEnum.stringof ~ " " ~ statePropertyName ~ ";";
+	version (Have_vibe_d) {
+		@byName mixin(propertyDef);
+	}
+	else {
+		mixin(propertyDef);
+	}
 
 	/// Convenience property to set the state by the statePropertyName
 	mixin(`@property void ` ~ statePropertyName ~ `Transition(` ~  StateEnum.stringof ~ ` s) {
