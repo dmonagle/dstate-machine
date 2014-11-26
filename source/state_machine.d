@@ -131,6 +131,7 @@ mixin template StateMachine(Parent, StateEnum, bool transitionWithoutDefinition 
 			foreach (memberName; __traits(allMembers, Parent)) {
 				static if (is(typeof(__traits(getMember, Parent.init, memberName)) == function)) {
 
+					// TODO: Change these to arrays of the StateEnum rather than use strings
 					string[] toStates;
 					string[] fromStates;
 
