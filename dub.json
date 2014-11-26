@@ -5,9 +5,6 @@
 	"authors": ["David Monagle"],
 	"version": "0.0.2",
 	"licence": "MIT",
-	"dependencies": {
-		"vibe-d": ">=0.7.21",
-	},
 	"configurations": [
 		{
 			"targetType": "library",
