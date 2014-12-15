@@ -139,7 +139,6 @@ mixin template StateMachine(Parent, StateEnum, bool transitionWithoutDefinition 
 					alias transitionUDA = findUDA!(SMTransitionEventAttribute, member);
 					static if (transitionUDA.found && (transitionUDA.value.stateEnumName == StateEnum.stringof)) {
 						pragma(msg, "StateMachine event '" ~ memberName ~ "' for '" ~ Parent.stringof ~ "'")
-						transitionDefined = true;
 
 						alias fromStateUDA = findUDA!(SMFromStateAttribute, member);
 						alias toStateUDA = findUDA!(SMToStateAttribute, member);
@@ -156,6 +155,11 @@ mixin template StateMachine(Parent, StateEnum, bool transitionWithoutDefinition 
 
 						if ((fromStates.length == 0 || fromStates.canFind(mixin(statePropertyName).to!string)) &&
 						    (toStates.length == 0 || toStates.canFind(s.to!string))) {
+							transitionDefined = true;
+
+							version (Have_vibe_d) {
+								logDebugV("%s %s transition from %s to %s: %s", Parent.stringof, memberName.stringof, mixin(statePropertyName).to!string, s.to!string, memberName);
+							}
 
 							bool guardPassed = true;
 
@@ -232,6 +236,9 @@ unittest {
 	task.statusTransition = "todo";
 	task.statusTransition = "cancelled";
 	assert(task.isCancelled == true);
+
+	task.statusTransition = "closed"; // Should not be able to transition as it's not defined
+	assert(task.status != Task.Status.closed);
 
 	assert(task.internalState == Task.InternalState.new_);
 	task.internalStateTransition = "started";
