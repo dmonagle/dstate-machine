@@ -158,7 +158,7 @@ mixin template StateMachine(Parent, StateEnum, bool transitionWithoutDefinition 
 							transitionDefined = true;
 
 							version (Have_vibe_d) {
-								logDebugV("%s %s transition from %s to %s: %s", Parent.stringof, memberName.stringof, mixin(statePropertyName).to!string, s.to!string, memberName);
+								logDebugV("%s %s transition from %s to %s: %s", Parent.stringof, StateEnum.stringof, mixin(statePropertyName).to!string, s.to!string, memberName);
 							}
 
 							bool guardPassed = true;
