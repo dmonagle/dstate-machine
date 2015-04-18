@@ -30,6 +30,10 @@ unittest {
 
 struct SMFromStateAttribute {
 	string[] states;
+
+	this(string[] states) {
+		this.states = states;
+	}
 }
 
 auto fromState(string[] states...) {
@@ -38,6 +42,10 @@ auto fromState(string[] states...) {
 
 struct SMToStateAttribute {
 	string[] states;
+
+	this(string[] states) {
+		this.states = states;
+	}
 }
 
 auto toState(string[] states...) {
