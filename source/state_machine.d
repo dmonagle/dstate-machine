@@ -4,6 +4,8 @@ import std.conv;
 import std.string;
 
 version (Have_vibe_d) {
+	public import vibe.core.log;
+	public import vibe.data.serialization;
 	pragma(msg, "Compiling d-state-machine with vibe.d support");
 }
 
