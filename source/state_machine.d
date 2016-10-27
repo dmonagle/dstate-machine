@@ -138,6 +138,9 @@ mixin template StateMachine(Parent, StateEnum, bool transitionWithoutDefinition 
 			bool transitionSuccessful = true;
 			bool transitionDefined = false;
 
+			auto currentState = mixin(statePropertyName);
+			if (currentState == s) return; // No-Op for trying to change the state to it's existing state
+			
 			foreach (memberName; __traits(allMembers, Parent)) {
 				static if (is(typeof(__traits(getMember, Parent.init, memberName)) == function)) {
 
@@ -163,12 +166,12 @@ mixin template StateMachine(Parent, StateEnum, bool transitionWithoutDefinition 
 						else 
 							toStates = [];
 
-						if ((fromStates.length == 0 || fromStates.canFind(mixin(statePropertyName).to!string)) &&
+						if ((fromStates.length == 0 || fromStates.canFind(currentState.to!string)) &&
 						    (toStates.length == 0 || toStates.canFind(s.to!string))) {
 							transitionDefined = true;
 
 							version (Have_vibe_d) {
-								logDebugV("%s %s transition from %s to %s: %s", Parent.stringof, StateEnum.stringof, mixin(statePropertyName).to!string, s.to!string, memberName);
+								logDebugV("%s %s transition from %s to %s: %s", Parent.stringof, StateEnum.stringof, currentState.to!string, s.to!string, memberName);
 							}
 
 							bool guardPassed = true;
@@ -213,6 +216,7 @@ unittest {
 			finished,
 		}
 
+		int cancelCount;
 		bool isClosed = false;
 		bool isCancelled = false;
 
@@ -230,6 +234,7 @@ unittest {
 			}
 
 			@transitionEvent("Status") @toState("cancelled") @guard!((task) => !task.isClosed) bool cancelledCleanup() {
+				cancelCount++;
 				if (isClosed) return false;
 				isCancelled = true;
 				return true;
@@ -246,6 +251,10 @@ unittest {
 	task.statusTransition = "todo";
 	task.statusTransition = "cancelled";
 	assert(task.isCancelled == true);
+	assert(task.cancelCount == 1);
+	task.statusTransition = "cancelled";
+	assert(task.isCancelled == true);
+	assert(task.cancelCount == 1, "Cancelling fired the transition function but it was already cancelled");
 
 	task.statusTransition = "closed"; // Should not be able to transition as it's not defined
 	assert(task.status != Task.Status.closed);
